@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Sidewalk Grid Viewer</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <style>
+    html, body, #map {
+      height: 100%;
+      margin: 0;
+      padding: 0;
+    }
+    canvas.grid-layer {
+      position: absolute;
+      z-index: 500;
+      pointer-events: none;
+    }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+    // Load map JSON
+    fetch("map.json")
+      .then(response => response.json())
+      .then(data => {
+        const bounds = data.bounds;
+        const shape = data.shape;
+        const grid = data.data;
+
+        // Create map centered at midpoint of bounds
+        const map = L.map('map').setView([
+          (bounds[0][1] + bounds[1][1]) / 2,
+          (bounds[0][0] + bounds[1][0]) / 2
+        ], 17);
+
+        // Base layer
+        L.tileLayer('https://basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png', {
+          attribution: '&copy; <a href="https://carto.com/">CARTO</a>',
+          subdomains: 'abcd',
+          maxZoom: 20
+        }).addTo(map);
+
+        // Create and overlay canvas
+        const canvas = document.createElement("canvas");
+        canvas.width = shape[1];
+        canvas.height = shape[0];
+        canvas.className = "grid-layer";
+
+        const ctx = canvas.getContext("2d");
+
+        // Draw grid cells
+        for (let y = 0; y < shape[0]; y++) {
+          for (let x = 0; x < shape[1]; x++) {
+            if (grid[y][x] === 1) {
+              ctx.fillStyle = "rgba(255, 0, 0, 1)";
+              ctx.fillRect(x, y, 1, 1);
+            }
+          }
+        }
+
+        // Convert canvas to image overlay
+        const img = new Image();
+        img.src = canvas.toDataURL();
+        img.onload = () => {
+          const imageBounds = [
+            [bounds[1][1], bounds[0][0]], // SW (lat, lon)
+            [bounds[0][1], bounds[1][0]]  // NE (lat, lon)
+          ];
+          const overlay = L.imageOverlay(img.src, imageBounds, { opacity: 0.6 });
+          overlay.addTo(map);
+        };
+      });
+  </script>
+</body>
+</html>
