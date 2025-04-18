@@ -25,16 +25,16 @@ width = int((maxx - minx) / cell_size)
 height = int((maxy - miny) / cell_size)
 transform = Affine(cell_size, 0, minx, 0, -cell_size, maxy)
 
-transformer = Transformer.from_crs("EPSG:" + pgh, "EPSG:" + world, always_xy=True)
+transformer = Transformer.from_crs("EPSG:" + str(pgh), "EPSG:" + str(world), always_xy=True)
 topleft_lon, topleft_lat = transformer.transform(minx, maxy)
 bottomright_lon, bottomright_lat = transformer.transform(maxx, miny)
 
-shapes = ((geom, 1) for geom in sidewalks_utm.geometry if geom is not None)
+shapes = ((geom, 0) for geom in sidewalks_utm.geometry if geom is not None)
 grid = rasterio.features.rasterize(
     shapes=shapes,
     out_shape=(height, width),
     transform=transform,
-    fill=0,
+    fill=5,
     dtype=np.uint8
 )
 
