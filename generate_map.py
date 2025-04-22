@@ -67,8 +67,7 @@ walking_grid = rasterio.features.rasterize(
     shapes=walking_shapes,
     out_shape=(height, width),
     transform=transform,
-    fill=255,
-    dtype=np.uint8
+    fill=9999
 )
 
 biking_shapes = ((geom, 0) for geom in biking_utm.geometry if geom is not None)
@@ -76,8 +75,7 @@ biking_grid = rasterio.features.rasterize(
     shapes=biking_shapes,
     out_shape=(height, width),
     transform=transform,
-    fill=255,
-    dtype=np.uint8
+    fill=9999
 )
 
 

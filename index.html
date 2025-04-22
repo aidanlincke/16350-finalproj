@@ -65,14 +65,27 @@
         const biking = data.biking;
 
         let pathLayer = null;
+        let bikeRackLayer = L.layerGroup();
         let startMarker = null;
         let endMarker = null;
+
+        bike_racks.forEach(([row, col]) => {
+          const [lat, lng] = rowColToLatLng(row, col, width, height, topleft_latlon, bottomright_latlon);
+          const marker = L.circleMarker([lat, lng], {
+            radius: 5,
+            color: "green",
+            fillColor: "lime",
+            fillOpacity: 0.8
+          });
+          bikeRackLayer.addLayer(marker);
+        });
 
         // Create map centered at midpoint of bounds
         const map = L.map('map').setView([
           (topleft_latlon[0] + bottomright_latlon[0]) / 2,
           (topleft_latlon[1] + bottomright_latlon[1]) / 2
         ], 17);
+        bikeRackLayer.addTo(map);
 
         map.on('click', function(e) {
           const { lat, lng } = e.latlng;
@@ -80,9 +93,37 @@
           const marker = L.marker([lat, lng], { draggable: true });
 
           if (startMarker == null) {
-            startMarker = marker.addTo(map).bindPopup("Start").openPopup();
+            const marker = L.marker([lat, lng], { draggable: true });
+
+            // Create a little dropdown HTML element
+            const popupContent = `
+              <strong>Start</strong><br/>
+              <label for="mode-select">Mode:</label>
+              <select id="mode-select">
+                <option value="walking" selected>Walk</option>
+                <option value="biking">Bike</option>
+              </select>
+            `;
+
+            startMarker = marker.addTo(map)
+              .bindPopup(popupContent)
+              .openPopup();
+
+              startMarker.on("popupopen", () => {
+                const select = document.getElementById("mode-select");
+                if (select) {
+                  startMarker.mode = select.value;
+                  select.addEventListener("change", () => {
+                    startMarker.mode = select.value;
+                  });
+                }
+              });
+
           } else if (endMarker == null) {
-            endMarker = marker.addTo(map).bindPopup("End").openPopup();
+            const popupContent = `
+              <strong>Goal</strong><br/>
+            `;
+            endMarker = marker.addTo(map).bindPopup(popupContent).openPopup();
           }
         });
 
@@ -147,12 +188,12 @@
           const bikingFlat = biking.flat();
           const bikeRacksFlat = bike_racks.flat();
 
-          const walkingPtr = Module._malloc(walkingFlat.length);
-          const bikingPtr = Module._malloc(bikingFlat.length);
+          const walkingPtr = Module._malloc(walkingFlat.length * 4);
+          const bikingPtr = Module._malloc(bikingFlat.length * 4);
           const bikeRacksPtr = Module._malloc(bikeRacksFlat.length * 4);
 
-          Module.HEAPU8.set(walkingFlat, walkingPtr);
-          Module.HEAPU8.set(bikingFlat, bikingPtr);
+          Module.HEAP32.set(walkingFlat, walkingPtr / 4);
+          Module.HEAP32.set(bikingFlat, bikingPtr / 4);
           Module.HEAP32.set(bikeRacksFlat, bikeRacksPtr / 4);
           Module._transfer_params(width, height, walkingPtr, bikingPtr, bikeRacksPtr, bike_racks.length);
           Module._free(walkingPtr);
@@ -173,10 +214,12 @@
             const [startRow, startCol] = latLngToRowCol(startLat, startLon, width, height, topleft_latlon, bottomright_latlon);
             const [goalRow, goalCol] = latLngToRowCol(goalLat, goalLon, width, height, topleft_latlon, bottomright_latlon);
 
-            const ptr = Module._aStar(startRow, startCol, goalRow, goalCol, 0);
+            const modeStr = startMarker.mode || "walking";
+            const mode = modeStr === "biking" ? 1 : 0;
+
+            const ptr = Module._aStar(startRow, startCol, goalRow, goalCol, mode);
             const length = Module._aStarPathLength();
             const pathFlat = new Int32Array(Module.HEAP32.buffer, ptr, length * 2);
-
 
             const path = [];
             for (let i = 0; i < length; i++) {
