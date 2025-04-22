@@ -2,7 +2,7 @@
 <html>
 <head>
   <meta charset="utf-8" />
-  <title>Sidewalk Grid Viewer</title>
+  <title>CMU Map</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
@@ -17,27 +17,89 @@
       z-index: 500;
       pointer-events: none;
     }
+    #run-button {
+      position: absolute;
+      top: 10px;
+      left: 50px;
+      z-index: 1000;
+    }
+    #reset-button {
+      position: absolute;
+      top: 30px;
+      left: 50px;
+      z-index: 1000;
+    }
   </style>
 </head>
 <body>
   <div id="map"></div>
+  <button id="run-button">Run A*</button>
+  <button id="reset-button">Reset</button>
 
+  <script src="astar.js"></script>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script>
+    function latLngToRowCol(lat, lng, width, height, topleft, bottomright) {
+      const row = Math.floor((lat - topleft[0]) / (bottomright[0] - topleft[0]) * height);
+      const col = Math.floor((lng - topleft[1]) / (bottomright[1] - topleft[1]) * width);
+      return [row, col];
+    }
+
+    function rowColToLatLng(row, col, width, height, topleft, bottomright) {
+      const lat = topleft[0] + (row / height) * (bottomright[0] - topleft[0]);
+      const lng = topleft[1] + (col / width)  * (bottomright[1] - topleft[1]);
+      return [lat, lng];
+    }
+
+
     // Load map JSON
     fetch("map.json")
       .then(response => response.json())
       .then(data => {
-        const bounds = data.bounds;
-        const shape = data.shape;
+        const topleft_latlon = data.topleft_latlon;
+        const bottomright_latlon = data.bottomright_latlon;
+        const width = data.width;
+        const height = data.height;
+        const bike_racks = data.bike_racks;
         const walking = data.walking;
         const biking = data.biking;
 
+        let pathLayer = null;
+        let startMarker = null;
+        let endMarker = null;
+
         // Create map centered at midpoint of bounds
         const map = L.map('map').setView([
-          (bounds[0][1] + bounds[1][1]) / 2,
-          (bounds[0][0] + bounds[1][0]) / 2
+          (topleft_latlon[0] + bottomright_latlon[0]) / 2,
+          (topleft_latlon[1] + bottomright_latlon[1]) / 2
         ], 17);
+
+        map.on('click', function(e) {
+          const { lat, lng } = e.latlng;
+
+          const marker = L.marker([lat, lng], { draggable: true });
+
+          if (startMarker == null) {
+            startMarker = marker.addTo(map).bindPopup("Start").openPopup();
+          } else if (endMarker == null) {
+            endMarker = marker.addTo(map).bindPopup("End").openPopup();
+          }
+        });
+
+        document.getElementById("reset-button").addEventListener("click", () => {
+          if (startMarker) {
+            map.removeLayer(startMarker);
+            startMarker = null;
+          }
+          if (endMarker) {
+            map.removeLayer(endMarker);
+            endMarker = null;
+          }
+          if (pathLayer) {
+            map.removeLayer(pathLayer);
+            pathLayer = null;
+          }
+        });
 
         // Base layer
         L.tileLayer('https://basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png', {
@@ -48,15 +110,15 @@
 
         // Create and overlay canvas
         const canvas = document.createElement("canvas");
-        canvas.width = shape[1];
-        canvas.height = shape[0];
+        canvas.width = width;
+        canvas.height = height;
         canvas.className = "grid-layer";
 
         const ctx = canvas.getContext("2d");
 
         // Draw grid cells
-        for (let y = 0; y < shape[0]; y++) {
-          for (let x = 0; x < shape[1]; x++) {
+        for (let y = 0; y < height; y++) {
+          for (let x = 0; x < width; x++) {
             if (walking[y][x] === 0) {
               ctx.fillStyle = "rgba(255, 0, 0, 1)";
               ctx.fillRect(x, y, 1, 1);
@@ -69,21 +131,74 @@
         img.src = canvas.toDataURL();
         img.onload = () => {
           const imageBounds = [
-            [bounds[1][1], bounds[0][0]], // SW (lat, lon)
-            [bounds[0][1], bounds[1][0]]  // NE (lat, lon)
+            [bottomright_latlon[0], topleft_latlon[1]], // SW (lat, lon)
+            [topleft_latlon[0], bottomright_latlon[1]]  // NE (lat, lon)
           ];
           const overlay = L.imageOverlay(img.src, imageBounds, { opacity: 0.6 });
           overlay.addTo(map);
         };
+
+        createAStarModule().then((Module) => {
+
+          const width = data.width;
+          const height = data.height;
+          
+          const walkingFlat = walking.flat();
+          const bikingFlat = biking.flat();
+          const bikeRacksFlat = bike_racks.flat();
+
+          const walkingPtr = Module._malloc(walkingFlat.length);
+          const bikingPtr = Module._malloc(bikingFlat.length);
+          const bikeRacksPtr = Module._malloc(bikeRacksFlat.length * 4);
+
+          Module.HEAPU8.set(walkingFlat, walkingPtr);
+          Module.HEAPU8.set(bikingFlat, bikingPtr);
+          Module.HEAP32.set(bikeRacksFlat, bikeRacksPtr / 4);
+          Module._transfer_params(width, height, walkingPtr, bikingPtr, bikeRacksPtr, bike_racks.length);
+          Module._free(walkingPtr);
+          Module._free(bikingPtr);
+          Module._free(bikeRacksPtr);
+
+          document.getElementById("run-button").addEventListener("click", () => {
+            if (startMarker == null || endMarker == null) {
+              alert("Place start and end markers to run A*.");
+              return;
+            }
+            startMarker.dragging.disable();
+            endMarker.dragging.disable();
+
+            const { lat: startLat, lng: startLon } = startMarker.getLatLng();
+            const { lat: goalLat, lng: goalLon } = endMarker.getLatLng();
+
+            const [startRow, startCol] = latLngToRowCol(startLat, startLon, width, height, topleft_latlon, bottomright_latlon);
+            const [goalRow, goalCol] = latLngToRowCol(goalLat, goalLon, width, height, topleft_latlon, bottomright_latlon);
+
+            const ptr = Module._aStar(startRow, startCol, goalRow, goalCol, 0);
+            const length = Module._aStarPathLength();
+            const pathFlat = new Int32Array(Module.HEAP32.buffer, ptr, length * 2);
+
+
+            const path = [];
+            for (let i = 0; i < length; i++) {
+              path.push({ r: pathFlat[2 * i], c: pathFlat[2 * i + 1] });
+            }
+            
+            if (pathLayer) {
+              map.removeLayer(pathLayer);
+            }
+
+            // Convert path grid coords to lat/lng
+            const latlngs = path.map(p => {
+              const lat = topleft_latlon[0] + (p.r / height) * (bottomright_latlon[0] - topleft_latlon[0]);
+              const lng = topleft_latlon[1] + (p.c / width)  * (bottomright_latlon[1] - topleft_latlon[1]);
+              return [lat, lng];
+            });
+
+            // Draw the new path
+            pathLayer = L.polyline(latlngs, { color: 'blue', weight: 3 }).addTo(map);
+          });
+        });
       });
-  </script>
-  <script src="astar.js"></script>
-  <script>
-    createAStarModule().then((Module) => {
-      const aStar = Module.cwrap("astar", "number", ["number", "number", "number", "number"]);
-      const result = aStar(0, 0, 5, 6);
-      console.log("Path cost:", result);
-    });
   </script>
 </body>
 </html>
