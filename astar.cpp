@@ -2,6 +2,8 @@
 #include <iostream>
 #include <unordered_set>
 
+#define BIKING_TO_WALKING 5
+
 struct Position {
     int row, col;
 
@@ -77,14 +79,14 @@ inline bool isValid(const State& state)
 }
 
 static const std::unordered_map<Position, float, PositionHash> walkingMoves = {
-    { { 1, 0 }, 5 * 1.0f },
-    { { -1, 0 }, 5 * 1.0f },
-    { { 0, 1 }, 5 * 1.0f },
-    { { 0, -1 }, 5 * 1.0f },
-    { { 1, 1 }, 5 * std::sqrt(2.0f) },
-    { { 1, -1 }, 5 * std::sqrt(2.0f) },
-    { { -1, 1 }, 5 * std::sqrt(2.0f) },
-    { { -1, -1 }, 5 * std::sqrt(2.0f) },
+    { { 1, 0 }, BIKING_TO_WALKING * 1.0f },
+    { { -1, 0 }, BIKING_TO_WALKING * 1.0f },
+    { { 0, 1 }, BIKING_TO_WALKING * 1.0f },
+    { { 0, -1 }, BIKING_TO_WALKING * 1.0f },
+    { { 1, 1 }, BIKING_TO_WALKING * std::sqrt(2.0f) },
+    { { 1, -1 }, BIKING_TO_WALKING * std::sqrt(2.0f) },
+    { { -1, 1 }, BIKING_TO_WALKING * std::sqrt(2.0f) },
+    { { -1, -1 }, BIKING_TO_WALKING * std::sqrt(2.0f) },
 };
 
 static const std::unordered_map<Position, float, PositionHash> bikingMoves = {
@@ -123,18 +125,70 @@ static std::vector<int> pathFlat;
 
 struct Node {
     State state;
-    double f; // f = g + h
+    double gCost;
+    double hCost;
+    int fCost() const { return gCost + hCost; }
 
     bool operator>(const Node& other) const
     {
-        return f > other.f;
+        return fCost() > other.fCost();
     }
 };
 
-int getHeuristic(State state, State goal)
-{
-    return eightConnectedDistance(state.position, goal.position);
+float getBikeHeuristic(Position position, Position goal) {
+    float min = std::numeric_limits<float>::max();
+    for (const Position& bike_rack : params.bike_racks) {
+        float positionToBikeRack = eightConnectedDistance(position, bike_rack);
+        float bikeRackToGoal = BIKING_TO_WALKING * eightConnectedDistance(bike_rack, goal);
+        float heuristic = positionToBikeRack + bikeRackToGoal;
+        min = std::min(min, heuristic);
+    }
+    return min;
 }
+
+
+float getHeuristic(State state, State goal)
+{
+    switch (state.mode) {
+        case BIKING:
+        return getBikeHeuristic(state.position, goal.position);
+        case WALKING:
+        return BIKING_TO_WALKING * eightConnectedDistance(state.position, goal.position);
+    }
+    
+}
+
+State findNearestValidPosition(const State& state)
+{
+    std::queue<Position> queue;
+    std::unordered_set<Position, PositionHash> visited;
+
+    queue.push(state.position);
+    visited.insert(state.position);
+
+    const std::unordered_map<Position, float, PositionHash>& moves = getMoves(state.mode);
+
+    while (!queue.empty()) {
+        Position current = queue.front();
+        queue.pop();
+
+        State testState = { current, state.mode };
+        if (isValid(testState)) {
+            return testState;
+        }
+
+        for (const auto& [move, _] : moves) {
+            Position neighbor = current + move;
+            if (isValid(neighbor) && visited.find(neighbor) == visited.end()) {
+                visited.insert(neighbor);
+                queue.push(neighbor);
+            }
+        }
+    }
+
+    return { -1, -1 };
+}
+
 
 extern "C" {
 
@@ -145,19 +199,28 @@ extern "C" {
 int* aStar(int start_r, int start_c, int goal_r, int goal_c, int mode)
 {
     printf("Starting A* from (%d, %d) to (%d, %d) with mode %d.\n", start_r, start_c, goal_r, goal_c, mode);
+    auto startTime = std::chrono::high_resolution_clock::now();
 
     pathFlat.clear();
     Position startPosition = { start_r, start_c };
     Position goalPosition = { goal_r, goal_c };
+
     State start = { startPosition, static_cast<Mode>(mode) };
     State goal = { goalPosition, WALKING };
+    if (!isValid(start)) {
+        start = findNearestValidPosition(start);
+    }
+    if (!isValid(goal)) {
+        goal = findNearestValidPosition(goal);
+    }
+
 
     std::unordered_set<State, StateHash> closed;
     std::priority_queue<Node, std::vector<Node>, std::greater<Node>> open;
     std::unordered_map<State, State, StateHash> prev;
     std::unordered_map<State, float, StateHash> dist;
 
-    open.push({ start, 0 });
+    open.push({ start, 0, 0 });
     while (open.size() > 0) {
         Node node = open.top();
         open.pop();
@@ -180,7 +243,10 @@ int* aStar(int start_r, int start_c, int goal_r, int goal_c, int mode)
                 pathFlat.push_back(state.position.col);
                 pathFlat.push_back(state.mode);
             }
-            printf("Found path of size %zu.\n", path.size());
+            auto endTime = std::chrono::high_resolution_clock::now();
+
+            std::chrono::duration<double> duration = endTime - startTime;
+            printf("Found path of size %zu in %f seconds.\n", path.size(), duration.count());
             return pathFlat.data();
         }
 
@@ -202,11 +268,11 @@ int* aStar(int start_r, int start_c, int goal_r, int goal_c, int mode)
                     continue;
                 }
 
-                float newCost = node.f + moveCost + params.walking[newPosition.row][newPosition.col] + (getHeuristic(newState, goal));
+                float newCost = node.gCost + moveCost;
                 if (dist.count(newState) == 0 || newCost < dist[newState]) {
                     dist[newState] = newCost;
                     prev[newState] = node.state;
-                    open.push({ newState, newCost });
+                    open.push({ newState, newCost, getHeuristic(newState, goal) });
                 }
             }
         }

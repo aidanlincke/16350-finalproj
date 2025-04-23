@@ -94,7 +94,7 @@
         map.on('click', function(e) {
           const { lat, lng } = e.latlng;
           const [row, col] = latLngToRowCol(lat, lng, width, height, topleft_latlon, bottomright_latlon);
-          console.log("Clicked at ", e.latlng, row, col);
+          console.log("Clicked at ", lat, lng, row, col);
 
           const marker = L.marker([lat, lng], { draggable: true });
 
