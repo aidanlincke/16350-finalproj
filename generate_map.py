@@ -1,6 +1,5 @@
 import osmnx as ox
 import json
-import numpy as np
 import rasterio.features
 from affine import Affine
 import matplotlib.pyplot as plt

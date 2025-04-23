@@ -3,6 +3,7 @@
 #include <unordered_set>
 
 #define BIKING_TO_WALKING 5
+#define H_WEIGHT 2
 
 struct Position {
     int row, col;
@@ -272,7 +273,7 @@ int* aStar(int start_r, int start_c, int goal_r, int goal_c, int mode)
                 if (dist.count(newState) == 0 || newCost < dist[newState]) {
                     dist[newState] = newCost;
                     prev[newState] = node.state;
-                    open.push({ newState, newCost, getHeuristic(newState, goal) });
+                    open.push({ newState, newCost, H_WEIGHT * getHeuristic(newState, goal) });
                 }
             }
         }
