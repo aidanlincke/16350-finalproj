@@ -247,7 +247,7 @@ int* aStar(int start_r, int start_c, int goal_r, int goal_c, int mode)
             auto endTime = std::chrono::high_resolution_clock::now();
 
             std::chrono::duration<double> duration = endTime - startTime;
-            printf("Found path of size %zu in %f seconds.\n", path.size(), duration.count());
+            printf("Found path of size %zu with cost %f in %f seconds.\n", path.size(), dist[goal], duration.count());
             return pathFlat.data();
         }
 
