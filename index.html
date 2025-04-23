@@ -118,7 +118,12 @@
               startMarker.on("popupopen", () => {
                 const select = document.getElementById("mode-select");
                 if (select) {
-                  startMarker.mode = select.value;
+                  if (startMarker.mode) {
+                    select.value = startMarker.mode;
+                  } else {
+                    startMarker.mode = select.value;
+                  }
+
                   select.addEventListener("change", () => {
                     startMarker.mode = select.value;
                   });

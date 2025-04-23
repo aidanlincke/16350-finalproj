@@ -123,6 +123,8 @@ extern "C" {
  */
 int* aStar(int start_r, int start_c, int goal_r, int goal_c, int mode)
 {
+    printf("Starting A* from (%d, %d) to (%d, %d) with mode %d.\n", start_r, start_c, goal_r, goal_c, mode);
+
     pathFlat.clear();
     Position startPosition = { start_r, start_c };
     Position goalPosition = { goal_r, goal_c };
@@ -176,7 +178,6 @@ int* aStar(int start_r, int start_c, int goal_r, int goal_c, int mode)
 
             for (const State& newState : newStates) {
                 if (!isValid(newState) || closed.find(newState) != closed.end()) {
-                    
                     continue;
                 }
 
@@ -184,7 +185,7 @@ int* aStar(int start_r, int start_c, int goal_r, int goal_c, int mode)
                 if (dist.count(newState) == 0 || newCost < dist[newState]) {
                     dist[newState] = newCost;
                     prev[newState] = node.state;
-                    open.push({ { newPosition, newMode }, newCost });
+                    open.push({ newState, newCost });
                 }
             }
         }
