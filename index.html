@@ -19,13 +19,13 @@
     }
     #run-button {
       position: absolute;
-      top: 10px;
+      top: 30px;
       left: 50px;
       z-index: 1000;
     }
     #reset-button {
       position: absolute;
-      top: 30px;
+      top: 50px;
       left: 50px;
       z-index: 1000;
     }
@@ -33,6 +33,10 @@
 </head>
 <body>
   <div id="map"></div>
+  <select id="grid-toggle" style="position: absolute; top: 10px; left: 50px; z-index: 1000;">
+    <option value="walking" selected>Walking Grid</option>
+    <option value="biking">Biking Grid</option>
+  </select>
   <button id="run-button">Run A*</button>
   <button id="reset-button">Reset</button>
 
@@ -89,6 +93,8 @@
 
         map.on('click', function(e) {
           const { lat, lng } = e.latlng;
+          const [row, col] = latLngToRowCol(lat, lng, width, height, topleft_latlon, bottomright_latlon);
+          console.log("Clicked at ", e.latlng, row, col);
 
           const marker = L.marker([lat, lng], { draggable: true });
 
@@ -150,34 +156,53 @@
         }).addTo(map);
 
         // Create and overlay canvas
+        function drawGrid(type) {
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+          const grid = type === "biking" ? biking : walking;
+          ctx.fillStyle = type === "biking" ? "rgba(0, 0, 255, 1)" : "rgba(255, 0, 0, 1)";
+
+          for (let y = 0; y < height; y++) {
+            for (let x = 0; x < width; x++) {
+              if (grid[y][x] === 0) {
+                ctx.fillRect(x, y, 1, 1);
+              }
+            }
+          }
+
+          img.src = canvas.toDataURL();
+        }
+
+        const img = new Image();
+        img.onload = () => {
+          const imageBounds = [
+            [bottomright_latlon[0], topleft_latlon[1]],
+            [topleft_latlon[0], bottomright_latlon[1]]
+          ];
+
+          if (map.gridOverlay) {
+            map.removeLayer(map.gridOverlay);
+          }
+
+          map.gridOverlay = L.imageOverlay(img.src, imageBounds, { opacity: 0.6 });
+          map.gridOverlay.addTo(map);
+        };
+
         const canvas = document.createElement("canvas");
         canvas.width = width;
         canvas.height = height;
         canvas.className = "grid-layer";
-
         const ctx = canvas.getContext("2d");
+        drawGrid("walking");
 
-        // Draw grid cells
-        for (let y = 0; y < height; y++) {
-          for (let x = 0; x < width; x++) {
-            if (walking[y][x] === 0) {
-              ctx.fillStyle = "rgba(255, 0, 0, 1)";
-              ctx.fillRect(x, y, 1, 1);
-            }
+        document.getElementById("grid-toggle").addEventListener("change", (e) => {
+          drawGrid(e.target.value);
+          if (map.gridOverlay) {
+            map.removeLayer(map.gridOverlay);
           }
-        }
 
-        // Convert canvas to image overlay
-        const img = new Image();
-        img.src = canvas.toDataURL();
-        img.onload = () => {
-          const imageBounds = [
-            [bottomright_latlon[0], topleft_latlon[1]], // SW (lat, lon)
-            [topleft_latlon[0], bottomright_latlon[1]]  // NE (lat, lon)
-          ];
-          const overlay = L.imageOverlay(img.src, imageBounds, { opacity: 0.6 });
-          overlay.addTo(map);
-        };
+          img.onload(); // re-add updated overlay
+        });
 
         createAStarModule().then((Module) => {
 
@@ -219,11 +244,11 @@
 
             const ptr = Module._aStar(startRow, startCol, goalRow, goalCol, mode);
             const length = Module._aStarPathLength();
-            const pathFlat = new Int32Array(Module.HEAP32.buffer, ptr, length * 2);
+            const pathFlat = new Int32Array(Module.HEAP32.buffer, ptr, length * 3);
 
             const path = [];
             for (let i = 0; i < length; i++) {
-              path.push({ r: pathFlat[2 * i], c: pathFlat[2 * i + 1] });
+              path.push({ r: pathFlat[3 * i], c: pathFlat[3 * i + 1] });
             }
             
             if (pathLayer) {

@@ -17,7 +17,9 @@ walking_tags = {
     "highway": ["footway", "path"],
 }
 biking_tags = {
+    "foot": True,
     "highway": [
+        "footway",
         "cycleway",
         "path",
         "residential",
@@ -27,14 +29,14 @@ biking_tags = {
     "bicycle": True,
     "cycleway": True
 }
-bike_racks_latlon = [[40.444132, -79.941917], # UC Gym
-                    [40.442845, -79.942399], # Merson Courtyard
-                    [40.442105, -79.938684], # Maggie Mo
-                    [40.442489, -79.945821], # Wean
-                    [40.441666, -79.947262], # Scaife
-                    [40.441341, -79.943816], # Hunt
-                    [40.444083, -79.944599], # Gates
-                    [40.442431, -79.943734]] # Doherty
+bike_racks_latlon = [[40.444231214978565, -79.94195625185966], # UC Gym
+                    [40.442877844449434, -79.94237735867502], # Merson Courtyard
+                    [40.442124599275054, -79.93868261575699], # Maggie Mo
+                    [40.44250530554684, -79.94570598006248], # Wean
+                    [40.441729601480795, -79.94718521833421], # Scaife
+                    [40.44130806380692, -79.94378283619882], # Hunt
+                    [40.44405668682533, -79.94456604123117], # Gates
+                    [40.442404, -79.943669]] # Doherty
 
 
 pgh_to_world = Transformer.from_crs("EPSG:" + str(pgh), "EPSG:" + str(world), always_xy=True)
@@ -53,21 +55,12 @@ transform = Affine(cell_size, 0, minx, 0, -cell_size, maxy)
 topleft_lon, topleft_lat = pgh_to_world.transform(minx, maxy)
 bottomright_lon, bottomright_lat = pgh_to_world.transform(maxx, miny)
 
-bike_racks_rowcol = []
-for lat, lon in bike_racks_latlon:
-    x, y = world_to_pgh.transform(lon, lat)
-    col, row = ~transform * (x, y)
-    col, row = int(col), int(row)
-    if 0 <= row < height and 0 <= col < width:
-        bike_racks_rowcol.append((row, col))
-
-
 walking_shapes = ((geom, 0) for geom in walking_utm.geometry if geom is not None)
 walking_grid = rasterio.features.rasterize(
     shapes=walking_shapes,
     out_shape=(height, width),
     transform=transform,
-    fill=9999
+    fill=1
 )
 
 biking_shapes = ((geom, 0) for geom in biking_utm.geometry if geom is not None)
@@ -75,9 +68,18 @@ biking_grid = rasterio.features.rasterize(
     shapes=biking_shapes,
     out_shape=(height, width),
     transform=transform,
-    fill=9999
+    fill=1
 )
 
+bike_racks_rowcol = []
+for lat, lon in bike_racks_latlon:
+    x, y = world_to_pgh.transform(lon, lat)
+    col, row = ~transform * (x, y)
+    col, row = int(col), int(row)
+    if 0 <= row < height and 0 <= col < width and walking_grid[row][col] == 0 and biking_grid[row][col] == 0:
+        bike_racks_rowcol.append((row, col))
+    else:
+        print(f"Warning: The bike rack at {lat, lon} was invalid!")
 
 plt.imshow(biking_grid, cmap="gray", origin="upper")
 plt.axis("off")
