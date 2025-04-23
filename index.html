@@ -253,22 +253,40 @@
 
             const path = [];
             for (let i = 0; i < length; i++) {
-              path.push({ r: pathFlat[3 * i], c: pathFlat[3 * i + 1] });
+              path.push({
+                r: pathFlat[3 * i],
+                c: pathFlat[3 * i + 1],
+                mode: pathFlat[3 * i + 2] // 0 = walking, 1 = biking
+              });
             }
-            
+
             if (pathLayer) {
               map.removeLayer(pathLayer);
             }
 
-            // Convert path grid coords to lat/lng
-            const latlngs = path.map(p => {
+            const walkingSegs = [];
+            const bikingSegs = [];
+
+            path.forEach((p) => {
               const lat = topleft_latlon[0] + (p.r / height) * (bottomright_latlon[0] - topleft_latlon[0]);
               const lng = topleft_latlon[1] + (p.c / width)  * (bottomright_latlon[1] - topleft_latlon[1]);
-              return [lat, lng];
+              if (p.mode === 0) {
+                walkingSegs.push([lat, lng]);
+              } else {
+                bikingSegs.push([lat, lng]);
+              }
             });
 
-            // Draw the new path
-            pathLayer = L.polyline(latlngs, { color: 'blue', weight: 3 }).addTo(map);
+            // Draw the new segments in separate polylines
+            const layers = [];
+            if (walkingSegs.length > 0) {
+              layers.push(L.polyline(walkingSegs, { color: 'red', weight: 3 }));
+            }
+            if (bikingSegs.length > 0) {
+              layers.push(L.polyline(bikingSegs, { color: 'blue', weight: 3 }));
+            }
+
+            pathLayer = L.layerGroup(layers).addTo(map);
           });
         });
       });

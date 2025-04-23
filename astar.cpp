@@ -76,7 +76,18 @@ inline bool isValid(const State& state)
     }
 }
 
-static const std::unordered_map<Position, float, PositionHash> moves = {
+static const std::unordered_map<Position, float, PositionHash> walkingMoves = {
+    { { 1, 0 }, 5 * 1.0f },
+    { { -1, 0 }, 5 * 1.0f },
+    { { 0, 1 }, 5 * 1.0f },
+    { { 0, -1 }, 5 * 1.0f },
+    { { 1, 1 }, 5 * std::sqrt(2.0f) },
+    { { 1, -1 }, 5 * std::sqrt(2.0f) },
+    { { -1, 1 }, 5 * std::sqrt(2.0f) },
+    { { -1, -1 }, 5 * std::sqrt(2.0f) },
+};
+
+static const std::unordered_map<Position, float, PositionHash> bikingMoves = {
     { { 1, 0 }, 1.0f },
     { { -1, 0 }, 1.0f },
     { { 0, 1 }, 1.0f },
@@ -86,6 +97,16 @@ static const std::unordered_map<Position, float, PositionHash> moves = {
     { { -1, 1 }, std::sqrt(2.0f) },
     { { -1, -1 }, std::sqrt(2.0f) },
 };
+
+std::unordered_map<Position, float, PositionHash> getMoves(const Mode& mode)
+{
+    switch (mode) {
+    case WALKING:
+        return walkingMoves;
+    case BIKING:
+        return bikingMoves;
+    }
+}
 
 float eightConnectedDistance(Position p1, Position p2)
 {
@@ -163,7 +184,7 @@ int* aStar(int start_r, int start_c, int goal_r, int goal_c, int mode)
             return pathFlat.data();
         }
 
-        for (const auto& [move, moveCost] : moves) {
+        for (const auto& [move, moveCost] : getMoves(node.state.mode)) {
             Position newPosition = node.state.position + move;
             if (!isValid(newPosition)) {
                 continue;
