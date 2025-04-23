@@ -113,7 +113,6 @@
 
             startMarker = marker.addTo(map)
               .bindPopup(popupContent)
-              .openPopup();
 
               startMarker.on("popupopen", () => {
                 const select = document.getElementById("mode-select");
@@ -129,6 +128,7 @@
                   });
                 }
               });
+            startMarker.openPopup();
 
           } else if (endMarker == null) {
             const popupContent = `
