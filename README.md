@@ -2,8 +2,8 @@
 
 ### Compile the Code
 1. Run `generate_map.py`
-2. Install Emscripten
-3. Run `make`
+2. (Optional) Install Emscripten
+3. (Optional) Run `make`
 
 ### Run the Code
 1. Run `python -m http.server`
