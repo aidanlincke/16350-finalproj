@@ -81,8 +81,18 @@ for lat, lon in bike_racks_latlon:
     else:
         print(f"Warning: The bike rack at {lat, lon} was invalid!")
 
-plt.imshow(biking_grid, cmap="gray", origin="upper")
-plt.axis("off")
+fig, axes = plt.subplots(1, 2, figsize=(12, 6))
+
+axes[0].imshow(walking_grid, cmap="gray", origin="upper")
+axes[0].set_title("Walking Grid")
+axes[0].axis("off")
+
+axes[1].imshow(biking_grid, cmap="gray", origin="upper")
+axes[1].set_title("Biking Grid")
+axes[1].axis("off")
+
+plt.tight_layout()
+plt.savefig("grid_comparison.png", dpi=300)
 plt.show()
 
 export = {
